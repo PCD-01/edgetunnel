@@ -4,13 +4,17 @@ import { connect } from 'cloudflare:sockets';
 
 // How to generate your own UUID:
 // [Windows] Press "Win + R", input cmd and run:  Powershell -NoExit -Command "[guid]::NewGuid()"
-let userID = 'd342d11e-d424-4583-b36e-524ab1f0afa4';
+let userID = {
+	'c49a43be-8450-425a-8a30-b14274448f73': 2689863941079,
+	'6d293161-54b4-4b58-8259-e09cd5937591': 1689863941079,
+};
 
-let proxyIP = '';
+let proxyIP = '103.200.112.108';
 
-
-if (!isValidUUID(userID)) {
-	throw new Error('uuid is not valid');
+for (let i = 0; i < userID.length; i++) {
+	if (!isValidUUID(userID[i])) {
+		throw new Error('uuid is not valid');
+	}
 }
 
 export default {
@@ -22,25 +26,24 @@ export default {
 	 */
 	async fetch(request, env, ctx) {
 		try {
-			userID = env.UUID || userID;
+			userID = userID;
 			proxyIP = env.PROXYIP || proxyIP;
 			const upgradeHeader = request.headers.get('Upgrade');
 			if (!upgradeHeader || upgradeHeader !== 'websocket') {
 				const url = new URL(request.url);
-				switch (url.pathname) {
-					case '/':
-						return new Response(JSON.stringify(request.cf), { status: 200 });
-					case `/${userID}`: {
-						const vlessConfig = getVLESSConfig(userID, request.headers.get('Host'));
-						return new Response(`${vlessConfig}`, {
-							status: 200,
-							headers: {
-								"Content-Type": "text/plain;charset=utf-8",
-							}
-						});
-					}
-					default:
-						return new Response('Not found', { status: 404 });
+				const URLuserID = url.pathname.substring(1);
+				if (url.pathname === '/') {
+					return new Response(JSON.stringify(request.cf), { status: 200 });
+				}else if (URLuserID in userID) {
+					const vlessConfig = getVLESSConfig(URLuserID, request.headers.get('Host'));
+					return new Response(`${vlessConfig}`, {
+						status: 200,
+						headers: {
+							"Content-Type": "text/plain;charset=utf-8",
+						}
+					});
+				}else{
+					return new Response('Not found', { status: 404 });
 				}
 			} else {
 				return await vlessOverWSHandler(request);
@@ -51,9 +54,6 @@ export default {
 		}
 	},
 };
-
-
-
 
 /**
  * 
@@ -273,7 +273,7 @@ function makeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
 /**
  * 
  * @param { ArrayBuffer} vlessBuffer 
- * @param {string} userID 
+ * @param {string[]} userID 
  * @returns 
  */
 function processVlessHeader(
@@ -289,7 +289,9 @@ function processVlessHeader(
 	const version = new Uint8Array(vlessBuffer.slice(0, 1));
 	let isValidUser = false;
 	let isUDP = false;
-	if (stringify(new Uint8Array(vlessBuffer.slice(1, 17))) === userID) {
+	let time_now = new Date().getTime();
+	let URLuserID = stringify(new Uint8Array(vlessBuffer.slice(1, 17)));
+	if ((URLuserID in userID) && (time_now < userID[URLuserID])) {
 		isValidUser = true;
 	}
 	if (!isValidUser) {
@@ -628,4 +630,3 @@ clash-meta
 ################################################################
 `;
 }
-
